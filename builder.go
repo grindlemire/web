@@ -1,4 +1,4 @@
-package httpserver
+package web
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/grindlemire/web/httpserver/middleware"
+	"github.com/grindlemire/web/middleware"
 	"github.com/pcman312/errutils"
 	"github.com/pkg/errors"
 	"github.com/rs/cors"

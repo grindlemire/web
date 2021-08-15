@@ -1,4 +1,4 @@
-package httpserver
+package web
 
 // router manages the routes of our server. This can get a lot more complicated but allows us to create arbitrarily
 // complex middleware and handlers (for example if either a middleware or handler needed a 3rd party connection to a database
