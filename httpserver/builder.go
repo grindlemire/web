@@ -1,0 +1,264 @@
+package httpserver
+
+import (
+	"fmt"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/gorilla/mux"
+	"github.com/grindlemire/web/httpserver/middleware"
+	"github.com/pcman312/errutils"
+	"github.com/pkg/errors"
+	"github.com/rs/cors"
+	"github.com/vrecan/life"
+	"go.uber.org/multierr"
+)
+
+// serverBuilder handles the functional configuration of the rest server. This adds some boilerplate but
+// allows us to have complex configuration with the ability to default and allows us to have a clean
+// struct in the actual server (for example we don't need to store the httpPort and httpsPort in the server struct)
+type serverBuilder struct {
+	log         Logger
+	httpPort    int
+	httpsPort   int
+	tlsCertPath string
+	tlsKeyPath  string
+	corsOptions cors.Options
+
+	handler http.Handler
+
+	authed                   []Endpoint
+	public                   []Endpoint
+	disableDefaultMiddleware bool
+	publicMiddleware         []mux.MiddlewareFunc
+	authedMiddleware         []mux.MiddlewareFunc
+	allMiddleware            []mux.MiddlewareFunc
+}
+
+// validate validates that all the required arguments are set
+func (b serverBuilder) validate() error {
+	merr := errutils.NewMultiError()
+	if b.handler != nil {
+		if b.publicMiddleware != nil {
+			multierr.Append(merr, errors.New("cannot specify public middleware as well as an external handler"))
+		}
+
+		if b.authedMiddleware != nil {
+			multierr.Append(merr, errors.New("cannot specify authed middleware as well as an external handler"))
+		}
+
+		if b.allMiddleware != nil {
+			multierr.Append(merr, errors.New("cannot specify any middleware as well as an external handler"))
+		}
+
+		if b.disableDefaultMiddleware {
+			multierr.Append(merr, errors.New("Disabling deafult middleware does nothing when using an external handler"))
+		}
+
+		if b.authed != nil {
+			multierr.Append(merr, errors.New("cannot specify authed endpoints as well as an external handler"))
+		}
+
+		if b.public != nil {
+			multierr.Append(merr, errors.New("cannot specify public endpoints as well as an external handler"))
+		}
+	}
+
+	return merr.ErrorOrNil()
+}
+
+// Opt is an option for configuring the rest server
+type Opt func(s *serverBuilder) error
+
+// HTTPPort configures the port the http redirect is served over
+func HTTPPort(port int) Opt {
+	return func(b *serverBuilder) error {
+		b.httpPort = port
+		return nil
+	}
+}
+
+// HTTPSPort configures the port the https server serves on
+func HTTPSPort(port int) Opt {
+	return func(b *serverBuilder) error {
+		b.httpsPort = port
+		return nil
+	}
+}
+
+// TLSCertPath configures the path to the tls certificate
+func TLSCertPath(path string) Opt {
+	return func(b *serverBuilder) error {
+		b.tlsCertPath = path
+		return nil
+	}
+}
+
+// TLSKeyPath configures the path to the tls private key
+func TLSKeyPath(path string) Opt {
+	return func(b *serverBuilder) error {
+		b.tlsKeyPath = path
+		return nil
+	}
+}
+
+// CORSOptions configures cors options for the server
+func CORSOptions(c cors.Options) Opt {
+	return func(b *serverBuilder) error {
+		b.corsOptions = c
+		return nil
+	}
+}
+
+// AuthedEndpoints adds some authed endpoints to the server
+func AuthedEndpoints(authed ...Endpoint) Opt {
+	return func(b *serverBuilder) error {
+		b.authed = append(b.authed, authed...)
+		return nil
+	}
+}
+
+// PublicEndpoints adds some public endpoints to the server
+func PublicEndpoints(public ...Endpoint) Opt {
+	return func(b *serverBuilder) error {
+		b.public = append(b.public, public...)
+		return nil
+	}
+}
+
+// DisableDefaultMiddleware will disable the server from adding request fingerprinting
+// prometheus metrics for all routes, and jwt auth for authed routes
+func DisableDefaultMiddleware(disable bool) Opt {
+	return func(b *serverBuilder) error {
+		b.disableDefaultMiddleware = disable
+		return nil
+	}
+}
+
+// AddAuthedMiddleware adds a set of middleware to the server. Order matters
+// here as first will be encountered first in a request.
+func AddAuthedMiddleware(authedMiddleware ...mux.MiddlewareFunc) Opt {
+	return func(b *serverBuilder) error {
+		b.authedMiddleware = append(b.authedMiddleware, authedMiddleware...)
+		return nil
+	}
+}
+
+// AddPublicMiddleware adds a set of middleware to the server. Order matters
+// here as first will be encountered first in a request.
+func AddPublicMiddleware(publicMiddleware ...mux.MiddlewareFunc) Opt {
+	return func(b *serverBuilder) error {
+		b.publicMiddleware = append(b.publicMiddleware, publicMiddleware...)
+		return nil
+	}
+}
+
+// AddAllMiddleware adds a set of middleware to the server. Order matters
+// here as first will be encountered first in a request.
+func AddAllMiddleware(allMiddleware ...mux.MiddlewareFunc) Opt {
+	return func(b *serverBuilder) error {
+		b.allMiddleware = append(b.allMiddleware, allMiddleware...)
+		return nil
+	}
+}
+
+// SetLogger sets a logger if you want one
+func SetLogger(logger Logger) Opt {
+	return func(b *serverBuilder) error {
+		b.log = logger
+		return nil
+	}
+}
+
+// Handler configures the rest handler that will route and respond to requests.
+// Use this configuration if you want to route your own requests outside of this libary.
+func Handler(handler http.Handler) Opt {
+	return func(b *serverBuilder) error {
+		b.handler = handler
+		return nil
+	}
+}
+
+// build will build the rest server with the complex configuration. This is a bit of boiler plate
+// but provides a really nice caller experience (see main.go). Required arguments are not passed via the
+// variadic args (unless you have truly a ton, then you would add a validation step after assembling the builder)
+func build(opts ...Opt) (s *Server, err error) {
+	// These are internal defaults if all else fails during configuration
+	b := serverBuilder{
+		httpPort:  80,
+		httpsPort: 443,
+		// handler, tlsCertPath, and tlsKeyPath are required so no default
+	}
+
+	// loop through our configured options and apply them to the functional builder
+	for _, opt := range opts {
+		err = opt(&b)
+		if err != nil {
+			return s, err
+		}
+	}
+
+	// validate we have all our required arguments
+	err = b.validate()
+	if err != nil {
+		return s, err
+	}
+
+	// if the caller doesn't supply their own router initialize the default
+	if b.handler == nil {
+		b.handler, err = b.createDefaultRouter()
+		if err != nil {
+			return s, err
+		}
+	}
+
+	// this is where we would set cors options if we had them
+	c := cors.New(b.corsOptions)
+
+	// assemble our server
+	s = &Server{
+		Life: life.NewLife(),
+		server: &http.Server{
+			Handler:      c.Handler(b.handler),
+			Addr:         fmt.Sprintf(":%d", b.httpsPort),
+			ReadTimeout:  10 * time.Second,
+			WriteTimeout: 10 * time.Second,
+		},
+		redirectServer: &http.Server{
+			Handler:      createHTTPSRedirect(b.httpsPort, b.log),
+			Addr:         fmt.Sprintf(":%d", b.httpPort),
+			ReadTimeout:  10 * time.Second,
+			WriteTimeout: 10 * time.Second,
+		},
+		tlsCertPath: b.tlsCertPath,
+		tlsKeyPath:  b.tlsKeyPath,
+		log:         b.log,
+	}
+	s.SetRun(s.run)
+	return s, nil
+}
+
+// createDefaultRouter will create the basic router with authed routes and public routes
+// It also initializes request fingerprinter, prometheus metrics middleware for all requests,
+// and jwt auth for auth middleware.
+func (b *serverBuilder) createDefaultRouter() (h http.Handler, err error) {
+	if !b.disableDefaultMiddleware {
+		b.allMiddleware = append([]mux.MiddlewareFunc{middleware.RequestFingerprinter, middleware.MetricsRecorder}, b.allMiddleware...)
+		b.authedMiddleware = append([]mux.MiddlewareFunc{middleware.NewAuthenticator().Authenticate})
+	}
+
+	return newRouter(b.authed, b.public, b.allMiddleware, b.publicMiddleware, b.authedMiddleware)
+}
+
+// createHTTPSRedirect creates a redirect function that will redirect us to the right rest server
+// to redirect us from http to https, even if the https server is served on a nonstandard port
+func createHTTPSRedirect(httpsPort int, log Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		cleanedHost := strings.Split(r.Host, ":")[0]
+		from := fmt.Sprintf("http://%s%s", r.Host, r.RequestURI)
+		redirect := fmt.Sprintf("https://%s:%d%s", cleanedHost, httpsPort, r.RequestURI)
+		log.Infof("Redirecting [%s] to [%s]", from, redirect)
+		http.Redirect(w, r, redirect, http.StatusMovedPermanently)
+	}
+}
