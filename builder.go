@@ -225,9 +225,9 @@ func SetAPIVersion(s string) Opt {
 	}
 }
 
-// SetHomeURL will set the top level home url for the server. Defaults to just the bare /
+// SetLanding will set the top level home path for the server. Defaults to just the bare /
 // If you are using a versioned api this will respect the versioning.
-func SetHomeURL(s string) Opt {
+func SetLanding(s string) Opt {
 	return func(b *serverBuilder) error {
 		b.landing = s
 		return nil

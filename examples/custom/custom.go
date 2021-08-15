@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/golang-jwt/jwt"
 	"github.com/grindlemire/web"
 	"github.com/grindlemire/web/middleware"
 	"github.com/vrecan/death"
@@ -27,7 +28,7 @@ const (
 )
 
 func main() {
-	err := generateCerts()
+	key, err := generateCerts()
 	if err != nil {
 		fmt.Printf("Error generating certs: %s\n", err)
 		return
@@ -40,8 +41,30 @@ func main() {
 	d := death.NewDeath(syscall.SIGINT, syscall.SIGTERM)
 	goRoutines := []io.Closer{}
 
-	e := web.Endpoint{
-		Path:   "/",
+	login := web.Endpoint{
+		Path:   "/login",
+		Method: []string{http.MethodGet},
+		Handler: func(w http.ResponseWriter, r *http.Request) {
+			token := jwt.NewWithClaims(jwt.SigningMethodRS256, middleware.Claims{
+				EntityID: "test entity",
+				StandardClaims: jwt.StandardClaims{
+					NotBefore: time.Date(2015, 10, 10, 12, 0, 0, 0, time.UTC).Unix(),
+					ExpiresAt: time.Now().Add(24 * 365 * time.Hour).Unix(),
+				},
+			})
+
+			tokenString, err := token.SignedString(key)
+			if err != nil {
+				return
+			}
+
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(fmt.Sprintf("Use this jwt in an authorization header: %s", tokenString)))
+		},
+	}
+
+	authed := web.Endpoint{
+		Path:   "/home",
 		Method: []string{http.MethodGet},
 		Handler: func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
@@ -54,8 +77,11 @@ func main() {
 		web.HTTPPort(8080),
 		web.TLSCertPath("./id_rsa_test.pub"),
 		web.TLSKeyPath("./id_rsa_test"),
-		web.AddEndpoint(e),
+		web.AddEndpoint(login),
+		web.AddAuthedEndpoint(authed),
 		web.AddAllMiddleware(myMiddleware),
+		web.SetAPIVersion("v3"),
+		web.SetLanding("/login"),
 	)
 	if err != nil {
 		fmt.Printf("Error creating server: %s\n", err)
@@ -82,32 +108,32 @@ func myMiddleware(next http.Handler) http.Handler {
 }
 
 // All the stuff below this is just for generate a temporary rsa key and x509 certificate
-func generateCerts() error {
+func generateCerts() (*rsa.PrivateKey, error) {
 	bitSize := 4096
 
 	privateKey, err := generatePrivateKey(bitSize)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	publicKeyBytes, err := generateX509Cert(privateKey)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	privateKeyBytes := encodePrivateKeyToPEM(privateKey)
 
 	err = writeKeyToFile(privateKeyBytes, privateKeyFile)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	err = writeKeyToFile([]byte(publicKeyBytes), publicKeyFile)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	return privateKey, nil
 }
 
 // generatePrivateKey creates a RSA Private Key of specified byte size
