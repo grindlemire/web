@@ -2,18 +2,12 @@ package web
 
 import (
 	"context"
-	"fmt"
+	"crypto/rsa"
 	"net/http"
 	"time"
 
 	"github.com/vrecan/life"
 )
-
-// // This is really dumb but it keeps the http server from logging that we have an unknown certificate
-// // using the std logger. This could/probably should be redirected to my logger
-// func init() {
-// 	stdlogger.SetOutput(ioutil.Discard)
-// }
 
 // Server is a wrapper around the gorilla mux http server that manages signals
 // Note that I don't use life' lifecycle here because we have a blocking call for
@@ -21,6 +15,9 @@ import (
 // I use the server.ListenAndServe and server.Shutdown).
 type Server struct {
 	*life.Life
+
+	// This is the private key of the public key that will be used to sign jwts in the auth middleware
+	SigningKey *rsa.PrivateKey
 
 	log            Logger
 	server         *http.Server
@@ -41,15 +38,19 @@ func NewServer(opts ...Opt) (s *Server, err error) {
 	return build(opts...)
 }
 
+// StartAndListen synchronously will start the server and bypass the clean goRoutine handling that life provides.
+// It will block while the server is listening
+func (s Server) StartAndListen() {
+	s.run()
+}
+
 func (s Server) run() {
 	// If no certs were specified just create a regular server with no redirect
 	if s.tlsCertPath == "" || s.tlsKeyPath == "" {
 		err := s.server.ListenAndServe()
 		if err != nil && err != http.ErrServerClosed {
-			fmt.Printf("HERE\n")
 			s.log.Fatalf("unable to start listening: %v", err)
 		}
-		fmt.Printf("HERE\n")
 		return
 	}
 
@@ -79,7 +80,10 @@ func (s Server) Close() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	s.server.Shutdown(ctx)
-	s.redirectServer.Shutdown(ctx)
+
+	if s.tlsCertPath != "" && s.tlsKeyPath != "" {
+		s.redirectServer.Shutdown(ctx)
+	}
 	s.log.Infof("successfully shut down http server")
 	return nil
 }

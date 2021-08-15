@@ -5,9 +5,9 @@ go 1.16
 require (
 	github.com/cihub/seelog v0.0.0-20170130134532-f561c5e57575 // indirect
 	github.com/felixge/httpsnoop v1.0.2
+	github.com/golang-jwt/jwt v3.2.2+incompatible
 	github.com/google/uuid v1.3.0
 	github.com/gorilla/mux v1.8.0
-	github.com/grindlemire/log v1.1.1
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/pcman312/errutils v0.0.0-20180502230517-f26c8827d4dc
 	github.com/pkg/errors v0.9.1

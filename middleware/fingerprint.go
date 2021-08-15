@@ -18,7 +18,7 @@ type RequestFingerprint struct {
 
 	id     string
 	source string
-	user   string
+	entity string
 }
 
 // This is used to be able to pull our fingerprint out of the context.
@@ -51,24 +51,24 @@ func NewRequestFingerprint(r *http.Request) *RequestFingerprint {
 	return &RequestFingerprint{
 		mu: &sync.RWMutex{},
 
-		id:     uuid.Must(uuid.NewUUID()).String(),
+		id:     uuid.New().String(),
 		source: r.RemoteAddr,
 	}
 }
 
-// SetUser sets the user for a request fingerprint
-func (f *RequestFingerprint) SetUser(user string) {
+// SetEntity sets the entity for a request fingerprint
+func (f *RequestFingerprint) SetEntity(entity string) {
 	f.mu.Lock()
-	f.user = user
+	f.entity = entity
 	f.mu.Unlock()
 }
 
-// GetUser gets the user of the request
-func (f *RequestFingerprint) GetUser() (user string) {
+// GetEntity gets the entity of the request
+func (f *RequestFingerprint) GetEntity() (entity string) {
 	f.mu.RLock()
-	user = f.user
+	entity = f.entity
 	f.mu.RUnlock()
-	return user
+	return entity
 }
 
 // GetSource gets the source ip for a request

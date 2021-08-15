@@ -5,6 +5,7 @@ package web
 // or complex configuration)
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/gorilla/mux"
@@ -26,6 +27,8 @@ type router struct {
 
 // newRouter creates a new mux router with all our handlers configured
 func newRouter(
+	landing string,
+	version string,
 	authed []Endpoint,
 	public []Endpoint,
 	allMiddleware []mux.MiddlewareFunc,
@@ -39,11 +42,16 @@ func newRouter(
 	for _, f := range allMiddleware {
 		r.Use(f)
 	}
-	v1Router := r.PathPrefix("/v1").Subrouter()
+
+	versionedRouter := r
+	if version != "" {
+		versionedRouter = r.PathPrefix(fmt.Sprintf("/%s", version)).Subrouter()
+		landing = fmt.Sprintf("%s/%s", version, landing)
+	}
 
 	// Protected Paths
 	// Create a subrouter for our authed routes. Add in the auth middleware
-	authedRouter := v1Router.PathPrefix("/").Subrouter()
+	authedRouter := versionedRouter.PathPrefix("/").Subrouter()
 	for _, f := range authedMiddleware {
 		authedRouter.Use(f)
 	}
@@ -57,7 +65,7 @@ func newRouter(
 
 	// Public paths
 	// Create a subrouter for our public paths
-	publicRouter := v1Router.PathPrefix("/").Subrouter()
+	publicRouter := versionedRouter.PathPrefix("/").Subrouter()
 	for _, f := range publicMiddleware {
 		publicRouter.Use(f)
 	}
@@ -75,10 +83,12 @@ func newRouter(
 		Path("/metrics").
 		Handler(promhttp.Handler())
 
-	// Bare Response redirect to whatever URL we want
-	r.NewRoute().
-		Path("/").
-		Handler(http.RedirectHandler("/v1/public", http.StatusMovedPermanently))
+	if landing != "" {
+		// Bare Response redirect to whatever URL we want
+		r.NewRoute().
+			Path("/").
+			Handler(http.RedirectHandler(fmt.Sprintf("/%s", landing), http.StatusMovedPermanently))
+	}
 
 	// This is required because the default NotFoundHandler will bypass all the middleware but we don't want that.
 	// Note that this needs to go last in our router so we don't wildcard over the rest of our routes.
