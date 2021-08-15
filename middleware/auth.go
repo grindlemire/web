@@ -77,7 +77,7 @@ func (a Authenticator) Authenticate(next http.Handler) http.Handler {
 // Claims care the claims in the jwt for authentication
 type Claims struct {
 	jwt.StandardClaims
-	entityID string `json:"entityId"`
+	EntityID string `json:"entityId"`
 }
 
 // validateRequest validates that the request is properly authenticated and authorized for the endpoint
@@ -104,7 +104,7 @@ func (a Authenticator) validateRequest(r *http.Request) (entity string, err erro
 		return "", errors.New("failed to validate claims")
 	}
 
-	return claims.entityID, nil
+	return claims.EntityID, nil
 }
 
 func getAuthHeader(r *http.Request) (string, error) {
