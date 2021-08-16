@@ -30,6 +30,7 @@ type serverBuilder struct {
 	jwtSigningKeyPath string
 	jwtPublicKeyPath  string
 	jwtPassphrase     string
+	jwtSigningKey     *rsa.PrivateKey
 
 	httpTimeout time.Duration
 	corsOptions cors.Options
@@ -73,6 +74,10 @@ func (b serverBuilder) validate() error {
 		if b.public != nil {
 			multierr.Append(merr, errors.New("cannot specify public endpoints as well as an external handler"))
 		}
+	}
+
+	if b.jwtSigningKey != nil && (b.jwtSigningKeyPath != "" || b.jwtPublicKeyPath != "") {
+		multierr.Append(merr, errors.New("cannot specify a jwt signing key as well as a path to a file for it"))
 	}
 
 	return merr.ErrorOrNil()
@@ -135,6 +140,15 @@ func JWTSigningKeyPath(path string) Opt {
 func JWTSingingKeyPassphrase(passphrase string) Opt {
 	return func(b *serverBuilder) error {
 		b.jwtSigningKeyPath = passphrase
+		return nil
+	}
+}
+
+// JWTSigningKey configures the path to the private  key that will be used
+// to validate the jwts. Defaults to the tls private key.
+func JWTSigningKey(key *rsa.PrivateKey) Opt {
+	return func(b *serverBuilder) error {
+		b.jwtSigningKey = key
 		return nil
 	}
 }
@@ -323,19 +337,21 @@ func (b *serverBuilder) buildWithHTTPS() (s *Server, err error) {
 	// this is where we would set cors options if we had them
 	c := cors.New(b.corsOptions)
 
-	if b.jwtSigningKeyPath == "" || b.jwtPublicKeyPath == "" {
-		b.jwtSigningKeyPath = b.tlsKeyPath
-		b.jwtPublicKeyPath = b.tlsCertPath
-	}
+	if b.jwtSigningKey == nil {
+		if b.jwtSigningKeyPath == "" || b.jwtPublicKeyPath == "" {
+			b.jwtSigningKeyPath = b.tlsKeyPath
+			b.jwtPublicKeyPath = b.tlsCertPath
+		}
 
-	rsaKey, err := middleware.GetRSAKey(b.jwtSigningKeyPath, b.jwtPassphrase, b.jwtPublicKeyPath)
-	if err != nil {
-		return s, err
+		b.jwtSigningKey, err = middleware.GetRSAKey(b.jwtSigningKeyPath, b.jwtPassphrase, b.jwtPublicKeyPath)
+		if err != nil {
+			return s, err
+		}
 	}
 
 	// if the caller doesn't supply their own router initialize the default
 	if b.handler == nil {
-		b.handler, err = b.createDefaultRouter(&rsaKey.PublicKey)
+		b.handler, err = b.createDefaultRouter(&b.jwtSigningKey.PublicKey)
 		if err != nil {
 			return s, err
 		}
@@ -343,8 +359,7 @@ func (b *serverBuilder) buildWithHTTPS() (s *Server, err error) {
 
 	// assemble our server
 	s = &Server{
-		Life:       life.NewLife(),
-		SigningKey: rsaKey,
+		Life: life.NewLife(),
 		server: &http.Server{
 			Handler:      c.Handler(b.handler),
 			Addr:         fmt.Sprintf(":%d", b.httpsPort),

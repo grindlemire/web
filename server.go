@@ -2,7 +2,6 @@ package web
 
 import (
 	"context"
-	"crypto/rsa"
 	"net/http"
 	"time"
 
@@ -15,9 +14,6 @@ import (
 // I use the server.ListenAndServe and server.Shutdown).
 type Server struct {
 	*life.Life
-
-	// This is the private key of the public key that will be used to sign jwts in the auth middleware
-	SigningKey *rsa.PrivateKey
 
 	log            Logger
 	server         *http.Server
