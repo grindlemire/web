@@ -15,7 +15,7 @@ import (
 // Endpoint ...
 type Endpoint struct {
 	Path    string
-	Method  []string
+	Method  string
 	Handler http.HandlerFunc
 }
 
@@ -58,7 +58,7 @@ func newRouter(
 
 	for _, endpoint := range authed {
 		authedRouter.NewRoute().
-			Methods(endpoint.Method...).
+			Methods(endpoint.Method).
 			Path(endpoint.Path).
 			HandlerFunc(endpoint.Handler)
 	}
@@ -72,7 +72,7 @@ func newRouter(
 
 	for _, endpoint := range public {
 		publicRouter.NewRoute().
-			Methods(endpoint.Method...).
+			Methods(endpoint.Method).
 			Path(endpoint.Path).
 			HandlerFunc(endpoint.Handler)
 	}

@@ -65,7 +65,7 @@ func main() {
 
 	authed := web.Endpoint{
 		Path:   "/home",
-		Method: []string{http.MethodGet},
+		Method: http.MethodGet,
 		Handler: func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("hello world"))
