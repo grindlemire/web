@@ -28,7 +28,6 @@ type router struct {
 // newRouter creates a new mux router with all our handlers configured
 func newRouter(
 	landing string,
-	version string,
 	authed []Endpoint,
 	public []Endpoint,
 	allMiddleware []mux.MiddlewareFunc,
@@ -43,15 +42,9 @@ func newRouter(
 		r.Use(f)
 	}
 
-	versionedRouter := r
-	if version != "" {
-		versionedRouter = r.PathPrefix(fmt.Sprintf("/%s", version)).Subrouter()
-		landing = fmt.Sprintf("%s/%s", version, landing)
-	}
-
 	// Protected Paths
 	// Create a subrouter for our authed routes. Add in the auth middleware
-	authedRouter := versionedRouter.PathPrefix("/").Subrouter()
+	authedRouter := r.PathPrefix("/").Subrouter()
 	for _, f := range authedMiddleware {
 		authedRouter.Use(f)
 	}
@@ -65,7 +58,7 @@ func newRouter(
 
 	// Public paths
 	// Create a subrouter for our public paths
-	publicRouter := versionedRouter.PathPrefix("/").Subrouter()
+	publicRouter := r.PathPrefix("/").Subrouter()
 	for _, f := range publicMiddleware {
 		publicRouter.Use(f)
 	}

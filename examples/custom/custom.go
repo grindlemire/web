@@ -80,7 +80,6 @@ func main() {
 		web.AddEndpoint(login),
 		web.AddAuthedEndpoint(authed),
 		web.AddAllMiddleware(myMiddleware),
-		web.SetAPIVersion("v3"),
 		web.SetLanding("/login"),
 	)
 	if err != nil {
