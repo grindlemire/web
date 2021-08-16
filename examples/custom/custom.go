@@ -43,7 +43,7 @@ func main() {
 
 	login := web.Endpoint{
 		Path:   "/login",
-		Method: []string{http.MethodGet},
+		Method: http.MethodGet,
 		Handler: func(w http.ResponseWriter, r *http.Request) {
 			token := jwt.NewWithClaims(jwt.SigningMethodRS256, middleware.Claims{
 				EntityID: "test entity",
