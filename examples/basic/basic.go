@@ -12,7 +12,11 @@ func main() {
 	e := web.Endpoint{
 		Path:   "/",
 		Method: http.MethodGet,
+		Queries: map[string]string{
+			"id": "{id:[0-9]+}",
+		},
 		Handler: func(w http.ResponseWriter, r *http.Request) {
+			fmt.Printf("ID: %s\n", r.FormValue("id"))
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("hello world"))
 		},

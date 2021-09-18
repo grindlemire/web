@@ -16,6 +16,7 @@ import (
 type Endpoint struct {
 	Path    string
 	Method  string
+	Queries map[string]string
 	Handler http.HandlerFunc
 }
 
@@ -50,10 +51,14 @@ func newRouter(
 	}
 
 	for _, endpoint := range authed {
-		authedRouter.NewRoute().
+		r := authedRouter.NewRoute().
 			Methods(endpoint.Method).
 			Path(endpoint.Path).
 			HandlerFunc(endpoint.Handler)
+
+		for k, v := range endpoint.Queries {
+			r.Queries(k, v)
+		}
 	}
 
 	// Public paths
@@ -64,10 +69,14 @@ func newRouter(
 	}
 
 	for _, endpoint := range public {
-		publicRouter.NewRoute().
+		r := publicRouter.NewRoute().
 			Methods(endpoint.Method).
 			Path(endpoint.Path).
 			HandlerFunc(endpoint.Handler)
+
+		for k, v := range endpoint.Queries {
+			r.Queries(k, v)
+		}
 	}
 
 	// Metrics endpoint for prometheus
