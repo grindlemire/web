@@ -14,6 +14,7 @@ import (
 
 // Endpoint ...
 type Endpoint struct {
+	Prefix  bool
 	Path    string
 	Method  string
 	Queries map[string]string
@@ -53,8 +54,13 @@ func newRouter(
 	for _, endpoint := range authed {
 		r := authedRouter.NewRoute().
 			Methods(endpoint.Method).
-			Path(endpoint.Path).
 			HandlerFunc(endpoint.Handler)
+
+		if endpoint.Prefix {
+			r.PathPrefix(endpoint.Path)
+		} else {
+			r.Path(endpoint.Path)
+		}
 
 		for k, v := range endpoint.Queries {
 			r.Queries(k, v)
@@ -69,10 +75,16 @@ func newRouter(
 	}
 
 	for _, endpoint := range public {
+
 		r := publicRouter.NewRoute().
 			Methods(endpoint.Method).
-			Path(endpoint.Path).
 			HandlerFunc(endpoint.Handler)
+
+		if endpoint.Prefix {
+			r.PathPrefix(endpoint.Path)
+		} else {
+			r.Path(endpoint.Path)
+		}
 
 		for k, v := range endpoint.Queries {
 			r.Queries(k, v)

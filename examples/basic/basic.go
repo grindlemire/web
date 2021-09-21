@@ -31,7 +31,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("Go to http://localhost:8080 to see the page\n")
+	fmt.Printf("Go to http://localhost:8080?id=1 to see the page\n")
 
 	// StartAndListen blocks like the ususal http.ListenAndServe call
 	s.StartAndListen()
